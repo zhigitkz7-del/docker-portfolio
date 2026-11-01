@@ -1,138 +1,398 @@
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <title>Ретро Змейка в Docker</title>
-    <style>
-        body {
-            background: #111;
-            color: #0f0;
-            font-family: 'Courier New', Courier, monospace;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-        }
-        h1 { margin-bottom: 10px; font-size: 24px; }
-        #score { font-size: 20px; margin-bottom: 15px; }
-        canvas {
-            border: 4px solid #0f0;
-            background: #000;
-            box-shadow: 0 0 20px rgba(0, 255, 0, 0.4);
-        }
-        .controls { margin-top: 15px; font-size: 14px; color: #888; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snake Arcade 2.0</title>
+<style>
+* { box-sizing: border-box; }
+
+:root {
+    color-scheme: dark;
+    --cyan: #00eaff;
+    --yellow: #ffe600;
+    --pink: #ff36c7;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 18px 12px;
+    background: radial-gradient(ellipse at top, #181043, #050510 70%);
+    color: white;
+    font-family: 'Courier New', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+h1 {
+    margin: 0 0 10px;
+    color: var(--yellow);
+    font-size: clamp(24px, 6vw, 36px);
+    letter-spacing: 3px;
+    text-shadow: 0 0 15px #ffe60099;
+}
+
+#score {
+    border: 2px solid var(--cyan);
+    border-radius: 12px;
+    padding: 8px 24px;
+    margin-bottom: 18px;
+    color: var(--cyan);
+    font-size: 20px;
+    box-shadow: 0 0 12px #00eaff55;
+}
+
+.game-wrap {
+    width: min(440px, calc(100vw - 28px), calc(100dvh - 205px));
+    min-width: 0;
+    aspect-ratio: 1;
+    border: 3px solid var(--cyan);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 0 22px #00eaff88;
+    touch-action: none;
+}
+
+canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: #050514;
+    touch-action: none;
+}
+
+.actions {
+    display: flex;
+    gap: 14px;
+    margin-top: 20px;
+}
+
+button {
+    padding: 12px 18px;
+    border: 2px solid var(--cyan);
+    border-radius: 10px;
+    background: #08091d;
+    color: var(--cyan);
+    font: bold 15px 'Courier New', monospace;
+    cursor: pointer;
+    box-shadow: 0 0 10px #00eaff55;
+}
+
+#pauseBtn {
+    border-color: var(--yellow);
+    color: var(--yellow);
+}
+
+button:active { transform: scale(.96); }
+
+.hint {
+    margin-top: 18px;
+    color: #a9a9c8;
+    font-size: 12px;
+    text-align: center;
+    line-height: 1.6;
+}
+</style>
 </head>
 <body>
-    <h1>ЗМЕЙКА</h1>
-    <div id="score">Счет: 0</div>
+
+<h1>◕ ЗМЕЙКА ◕</h1>
+<div id="score">СЧЁТ: 0</div>
+
+<div class="game-wrap">
     <canvas id="gameCanvas" width="400" height="400"></canvas>
-    <div class="controls">Управление: стрелки | Пауза/Плей: Пробел</div>
+</div>
 
-    <script>
-        const canvas = document.getElementById("gameCanvas");
-        const ctx = canvas.getContext("2d");
-        const scoreEl = document.getElementById("score");
+<div class="actions">
+    <button id="pauseBtn">Ⅱ ПАУЗА</button>
+    <button id="restartBtn">↻ ЗАНОВО</button>
+</div>
 
-        const gridSize = 20;
-        const tileCount = canvas.width / gridSize;
+<div class="hint">
+    📱 Свайп по полю — движение<br>
+    ⌨️ Стрелки — движение | Пробел — пауза
+</div>
 
-        let snake = [{ x: 10, y: 10 }];
-        let food = { x: 5, y: 5 };
-        let dx = 0;
-        let dy = 0;
-        let score = 0;
-        let gameInterval;
-        let isPaused = false;
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const scoreEl = document.getElementById("score");
+const pauseBtn = document.getElementById("pauseBtn");
 
-        document.addEventListener("keydown", changeDirection);
+const grid = 20;
+const count = 20;
+const colors = ["#ff3434", "#00eaff", "#ff80ce", "#ff9c21", "#a65cff"];
 
-        function gameLoop() {
-            if (isPaused) return;
-            update();
-            if (isGameOver()) {
-                alert("Игра окончена! Ваш счет: " + score);
-                resetGame();
+let snake, ghost, dx, dy, nextDx, nextDy, score;
+let paused = false;
+let finished = false;
+let touchX = 0;
+let touchY = 0;
+let turnQueued = false;
+let frame = 0;
+
+function resetGame() {
+    snake = [{x: 10, y: 10}];
+    dx = 0;
+    dy = 0;
+    nextDx = 0;
+    nextDy = 0;
+    score = 0;
+    paused = false;
+    finished = false;
+    turnQueued = false;
+    scoreEl.textContent = "СЧЁТ: 0";
+    pauseBtn.textContent = "Ⅱ ПАУЗА";
+    spawnGhost();
+    draw();
+}
+
+function spawnGhost() {
+    const empty = [];
+
+    for (let y = 0; y < count; y++) {
+        for (let x = 0; x < count; x++) {
+            if (!snake.some(p => p.x === x && p.y === y)) {
+                empty.push({x, y});
             }
+        }
+    }
+
+    if (!empty.length) {
+        finished = true;
+        setTimeout(() => alert("ПОБЕДА! Счёт: " + score), 20);
+        return;
+    }
+
+    const pos = empty[Math.floor(Math.random() * empty.length)];
+    ghost = {
+        ...pos,
+        color: colors[Math.floor(Math.random() * colors.length)]
+    };
+}
+
+function setDirection(x, y) {
+    if (paused || finished || turnQueued) return;
+
+    if ((dx !== 0 || dy !== 0) && x === -dx && y === -dy) {
+        return;
+    }
+
+    nextDx = x;
+    nextDy = y;
+    turnQueued = true;
+}
+
+function update() {
+    if (paused || finished) return;
+    if (nextDx === 0 && nextDy === 0) return;
+
+    dx = nextDx;
+    dy = nextDy;
+    turnQueued = false;
+
+    const head = {
+        x: snake[0].x + dx,
+        y: snake[0].y + dy
+    };
+
+    const eating = head.x === ghost.x && head.y === ghost.y;
+    const body = eating ? snake : snake.slice(0, -1);
+
+    const collision =
+        head.x < 0 || head.x >= count ||
+        head.y < 0 || head.y >= count ||
+        body.some(p => p.x === head.x && p.y === head.y);
+
+    if (collision) {
+        finished = true;
+        draw();
+        setTimeout(() => {
+            alert("Игра окончена! Счёт: " + score);
+            resetGame();
+        }, 40);
+        return;
+    }
+
+    snake.unshift(head);
+
+    if (eating) {
+        score += 10;
+        scoreEl.textContent = "СЧЁТ: " + score;
+        if (snake.length === count * count) {
+            finished = true;
             draw();
+            setTimeout(() => alert("ПОБЕДА! Счёт: " + score), 40);
+            return;
         }
+        spawnGhost();
+    } else {
+        snake.pop();
+    }
+}
 
-        function resetGame() {
-            snake = [{ x: 10, y: 10 }];
-            dx = 0;
-            dy = 0;
-            score = 0;
-            isPaused = false;
-            scoreEl.innerText = "Счет: " + score;
-            spawnFood();
-        }
+function drawGrid() {
+    ctx.strokeStyle = "#17224d";
+    ctx.lineWidth = 0.6;
 
-        function update() {
-            const head = { x: snake[0].x + dx, y: snake[0].y + dy };
-            snake.unshift(head);
+    for (let i = 0; i <= 400; i += grid) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i, 400);
+        ctx.stroke();
 
-            if (head.x === food.x && head.y === food.y) {
-                score += 10;
-                scoreEl.innerText = "Счет: " + score;
-                spawnFood();
-            } else {
-                snake.pop();
-            }
-        }
+        ctx.beginPath();
+        ctx.moveTo(0, i);
+        ctx.lineTo(400, i);
+        ctx.stroke();
+    }
+}
 
-        function spawnFood() {
-            food.x = Math.floor(Math.random() * tileCount);
-            food.y = Math.floor(Math.random() * tileCount);
-            snake.forEach(part => {
-                if (part.x === food.x && part.y === food.y) spawnFood();
-            });
-        }
+function drawGhost() {
+    if (!ghost) return;
 
-        function isGameOver() {
-            const head = snake[0];
-            if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount) {
-                return true;
-            }
-            for (let i = 1; i < snake.length; i++) {
-                if (head.x === snake[i].x && head.y === snake[i].y) return true;
-            }
-            return false;
-        }
+    const x = ghost.x * grid;
+    const y = ghost.y * grid;
+    const bob = Math.sin(frame * 0.16) * 1.5;
 
-        function draw() {
-            ctx.fillStyle = "#000";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(x, y + bob);
+    ctx.fillStyle = ghost.color;
+    ctx.shadowColor = ghost.color;
+    ctx.shadowBlur = 9;
 
-            ctx.fillStyle = "#f00";
-            ctx.fillRect(food.x * gridSize, food.y * gridSize, gridSize - 2, gridSize - 2);
+    ctx.beginPath();
+    ctx.moveTo(2, 18);
+    ctx.lineTo(2, 9);
+    ctx.arc(10, 9, 8, Math.PI, 0);
+    ctx.lineTo(18, 18);
+    ctx.lineTo(14, 15);
+    ctx.lineTo(10, 18);
+    ctx.lineTo(6, 15);
+    ctx.closePath();
+    ctx.fill();
 
-            ctx.fillStyle = "#0f0";
-            snake.forEach(part => {
-                ctx.fillRect(part.x * gridSize, part.y * gridSize, gridSize - 2, gridSize - 2);
-            });
-        }
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "white";
+    ctx.fillRect(5, 8, 4, 5);
+    ctx.fillRect(12, 8, 4, 5);
+    ctx.fillStyle = "#16247c";
+    ctx.fillRect(7, 10, 2, 3);
+    ctx.fillRect(14, 10, 2, 3);
+    ctx.restore();
+}
 
-        function changeDirection(event) {
-            const keyPressed = event.keyCode;
-            const LEFT = 37, UP = 38, RIGHT = 39, DOWN = 40, SPACE = 32;
+function drawSnake() {
+    ctx.save();
+    ctx.shadowColor = "#ffe600";
+    ctx.shadowBlur = 7;
 
-            if (keyPressed === SPACE) {
-                isPaused = !isPaused;
-                return;
-            }
+    snake.slice(1).forEach(p => {
+        ctx.fillStyle = "#ffdf00";
+        ctx.beginPath();
+        ctx.roundRect(
+            p.x * grid + 2,
+            p.y * grid + 2,
+            grid - 4,
+            grid - 4,
+            4
+        );
+        ctx.fill();
+    });
 
-            if (isPaused) return;
+    const head = snake[0];
+    const cx = head.x * grid + 10;
+    const cy = head.y * grid + 10;
 
-            if (keyPressed === LEFT && dx === 0) { dx = -1; dy = 0; }
-            if (keyPressed === UP && dy === 0) { dx = 0; dy = -1; }
-            if (keyPressed === RIGHT && dx === 0) { dx = 1; dy = 0; }
-            if (keyPressed === DOWN && dy === 0) { dx = 0; dy = 1; }
-        }
+    let angle = 0;
+    if (dx === -1) angle = Math.PI;
+    if (dy === -1) angle = -Math.PI / 2;
+    if (dy === 1) angle = Math.PI / 2;
 
-        spawnFood();
-        gameInterval = setInterval(gameLoop, 100);
-    </script>
+    const mouth = (dx === 0 && dy === 0)
+        ? 0.12
+        : 0.20 + Math.abs(Math.sin(frame * 0.28)) * 0.38;
+
+    ctx.fillStyle = "#ffe600";
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, 9, angle + mouth, angle + Math.PI * 2 - mouth);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+}
+
+function draw() {
+    ctx.fillStyle = "#050514";
+    ctx.fillRect(0, 0, 400, 400);
+    drawGrid();
+    drawGhost();
+    drawSnake();
+}
+
+function loop() {
+    frame++;
+    update();
+    draw();
+}
+
+document.addEventListener("keydown", event => {
+    const directions = {
+        ArrowLeft: [-1, 0],
+        ArrowRight: [1, 0],
+        ArrowUp: [0, -1],
+        ArrowDown: [0, 1]
+    };
+
+    if (directions[event.key]) {
+        event.preventDefault();
+        setDirection(...directions[event.key]);
+    }
+
+    if (event.code === "Space") {
+        event.preventDefault();
+        togglePause();
+    }
+});
+
+canvas.addEventListener("touchstart", event => {
+    const touch = event.changedTouches[0];
+    touchX = touch.clientX;
+    touchY = touch.clientY;
+}, {passive: true});
+
+canvas.addEventListener("touchend", event => {
+    event.preventDefault();
+
+    const touch = event.changedTouches[0];
+    const deltaX = touch.clientX - touchX;
+    const deltaY = touch.clientY - touchY;
+
+    if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) < 20) return;
+
+    if (Math.abs(deltaX) > Math.abs(deltaY)) {
+        setDirection(deltaX > 0 ? 1 : -1, 0);
+    } else {
+        setDirection(0, deltaY > 0 ? 1 : -1);
+    }
+}, {passive: false});
+
+function togglePause() {
+    if (finished) return;
+    paused = !paused;
+    pauseBtn.textContent = paused ? "▶ ИГРАТЬ" : "Ⅱ ПАУЗА";
+}
+
+pauseBtn.addEventListener("click", togglePause);
+document.getElementById("restartBtn").addEventListener("click", resetGame);
+
+resetGame();
+setInterval(loop, 110);
+</script>
 </body>
 </html>

@@ -165,7 +165,6 @@ function spawnGhost() {
 
     if (!empty.length) {
         finished = true;
-        setTimeout(() => alert("ПОБЕДА! Счёт: " + score), 20);
         return;
     }
 
@@ -212,10 +211,6 @@ function update() {
     if (collision) {
         finished = true;
         draw();
-        setTimeout(() => {
-            alert("Игра окончена! Счёт: " + score);
-            resetGame();
-        }, 40);
         return;
     }
 
@@ -330,11 +325,32 @@ function drawSnake() {
 function draw() {
     ctx.fillStyle = "#050514";
     ctx.fillRect(0, 0, 400, 400);
+
     drawGrid();
     drawGhost();
     drawSnake();
-}
 
+    if (finished) {
+        ctx.fillStyle = "rgba(5, 5, 20, 0.85)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#ff356b";
+        ctx.font = "bold 46px monospace";
+        ctx.shadowColor = "#ff356b";
+        ctx.shadowBlur = 20;
+        ctx.fillText("GAME OVER", 200, 180);
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "22px monospace";
+        ctx.fillText("SCORE: " + score, 200, 225);
+
+        ctx.fillStyle = "#ffe600";
+        ctx.font = "17px monospace";
+        ctx.fillText("PRESS RESTART", 200, 265);
+    }
+}
 function loop() {
     frame++;
     update();
